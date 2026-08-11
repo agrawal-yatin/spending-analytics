@@ -1,0 +1,23 @@
+{
+  "name": "FamilyWealth",
+  "short_name": "FamilyWealth",
+  "theme_color": "#2f6bff",
+  "background_color": "#f5f6f9",
+  "display": "standalone",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
