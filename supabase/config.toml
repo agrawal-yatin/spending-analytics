@@ -1,0 +1,16 @@
+# Minimal Supabase CLI config for deploying Edge Functions.
+# project_id is just a local label; `supabase link --project-ref` sets the real
+# project. If your CLI version complains, run `supabase init` to regenerate this.
+project_id = "spending-analytics"
+
+[functions.parse-statement]
+verify_jwt = true
+
+[functions.refresh-prices]
+verify_jwt = true
+
+[functions.kite]
+verify_jwt = true
+
+[functions.gmail-statements]
+verify_jwt = true
