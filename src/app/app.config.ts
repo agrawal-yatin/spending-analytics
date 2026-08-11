@@ -4,13 +4,14 @@ import { provideServiceWorker } from '@angular/service-worker';
 
 import { routes } from './app.routes';
 import { PersistenceAdapter } from './core/persistence';
-import { LocalStorageAdapter } from './core/local-storage.adapter';
+import { SupabaseAdapter } from './core/supabase.adapter';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes, withHashLocation()),
-    // Swap this single line for SupabaseAdapter when you add the backend.
-    { provide: PersistenceAdapter, useClass: LocalStorageAdapter },
+    // Cloud mode: data syncs to Supabase (requires keys in environment.ts + sign-in).
+    // For purely local storage, swap this back to LocalStorageAdapter.
+    { provide: PersistenceAdapter, useClass: SupabaseAdapter },
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000',
