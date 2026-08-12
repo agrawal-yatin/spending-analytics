@@ -4,13 +4,14 @@ import { supabase } from './supabase.client';
 import { StatementImportService, EmailAttachment } from './statement-import.service';
 
 /**
- * Discover statement PDFs in the user's Gmail and stage them on matching
- * accounts. Uses Supabase Google sign-in for a gmail.readonly token, then the
- * `gmail-statements` + `parse-statement` Edge Functions. Staging (matching +
- * password prompt + parse) is shared with Outlook via StatementImportService.
+ * Discover statement PDFs in the user's Outlook / Microsoft 365 mailbox and
+ * stage them on matching accounts. Uses Supabase Azure (Microsoft) sign-in for
+ * a Mail.Read token, then the `outlook-statements` + `parse-statement` funcs.
+ *
+ * Beta: encrypted PDFs are staged unparsed — open them and enter the password.
  */
 @Injectable({ providedIn: 'root' })
-export class GmailService {
+export class OutlookService {
   private auth = inject(AuthService);
   private importer = inject(StatementImportService);
 
@@ -18,32 +19,30 @@ export class GmailService {
     return this.auth.configured && !!this.auth.user();
   }
 
-  private async googleToken(): Promise<string | null> {
+  private async msToken(): Promise<string | null> {
     const cached = this.auth.providerToken();
     if (cached) return cached;
     const { data } = await supabase().auth.getSession();
     return (data.session as { provider_token?: string } | null)?.provider_token ?? null;
   }
 
-  async connectGoogle(): Promise<void> {
+  async connectMicrosoft(): Promise<void> {
     await supabase().auth.signInWithOAuth({
-      provider: 'google',
+      provider: 'azure',
       options: {
-        scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+        scopes: 'openid email offline_access https://graph.microsoft.com/Mail.Read',
         redirectTo: location.origin + location.pathname,
-        queryParams: { access_type: 'offline', prompt: 'consent' },
       },
     });
   }
 
-  /** Fetch statement attachments and stage/parse them onto matching accounts. */
   async importStatements(): Promise<string> {
     if (!this.available) return 'Enable cloud sync and sign in first.';
-    const token = await this.googleToken();
-    if (!token) { await this.connectGoogle(); return 'Redirecting to Google to authorize Gmail…'; }
+    const token = await this.msToken();
+    if (!token) { await this.connectMicrosoft(); return 'Redirecting to Microsoft to authorize Outlook…'; }
 
-    const { data, error } = await supabase().functions.invoke('gmail-statements', { body: { accessToken: token } });
-    if (error) return 'Gmail fetch failed: ' + error.message;
+    const { data, error } = await supabase().functions.invoke('outlook-statements', { body: { accessToken: token } });
+    if (error) return 'Outlook fetch failed: ' + error.message;
     const res = data as { attachments?: EmailAttachment[]; error?: string; scanned?: number };
     if (res.error) return res.error;
     const attachments = res.attachments ?? [];

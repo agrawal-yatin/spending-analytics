@@ -18,10 +18,32 @@ export class AuthService {
   private sb: SupabaseClient | null = this.configured ? supabase() : null;
   readonly user = signal<User | null>(null);
 
+  /**
+   * OAuth provider access token (Google / Microsoft), captured as it arrives.
+   * Supabase only exposes provider_token right after sign-in and drops it on
+   * token refresh, so we cache it (in memory + sessionStorage) for the mail
+   * import features to use.
+   */
+  readonly providerToken = signal<string | null>(readCachedProviderToken());
+
   constructor() {
     if (!this.sb) return;
-    this.sb.auth.getSession().then(({ data }) => this.user.set(data.session?.user ?? null));
-    this.sb.auth.onAuthStateChange((_event, session) => this.user.set(session?.user ?? null));
+    this.sb.auth.getSession().then(({ data }) => {
+      this.user.set(data.session?.user ?? null);
+      this.captureProviderToken(data.session);
+    });
+    this.sb.auth.onAuthStateChange((_event, session) => {
+      this.user.set(session?.user ?? null);
+      this.captureProviderToken(session);
+    });
+  }
+
+  private captureProviderToken(session: unknown) {
+    const t = (session as { provider_token?: string } | null)?.provider_token;
+    if (t) {
+      this.providerToken.set(t);
+      try { sessionStorage.setItem('fw_provider_token', t); } catch { /* ignore */ }
+    }
   }
 
   /** Send a login code to the given email. */
@@ -37,6 +59,12 @@ export class AuthService {
   }
 
   signOut() {
+    try { sessionStorage.removeItem('fw_provider_token'); } catch { /* ignore */ }
+    this.providerToken.set(null);
     return this.sb ? this.sb.auth.signOut() : Promise.resolve();
   }
+}
+
+function readCachedProviderToken(): string | null {
+  try { return sessionStorage.getItem('fw_provider_token'); } catch { return null; }
 }

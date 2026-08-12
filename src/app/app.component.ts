@@ -61,12 +61,21 @@ export class AppComponent {
   /** Show the app in local mode always; in cloud mode only when signed in. */
   showApp = computed(() => !this.auth.configured || !!this.auth.user());
 
+  private lastLoadedUser: string | null = null;
+
   constructor() {
-    // Cloud mode: once the user signs in, re-hydrate the store from their cloud data,
-    // then complete any pending Zerodha (Kite) login redirect.
+    // Cloud mode: once the user signs in (or switches), re-hydrate the store from
+    // their cloud data, then complete any pending Zerodha (Kite) login redirect.
+    // The reload is deferred to a microtask so its signal writes happen OUTSIDE
+    // this effect's reactive context (Angular forbids synchronous signal writes
+    // inside an effect — NG0600).
     effect(() => {
-      if (this.auth.configured && this.auth.user()) {
-        void this.store.reload().then(() => this.finishKiteRedirect());
+      const uid = this.auth.configured ? (this.auth.user()?.id ?? null) : null;
+      if (uid && uid !== this.lastLoadedUser) {
+        this.lastLoadedUser = uid;
+        queueMicrotask(() => void this.store.reload().then(() => this.finishKiteRedirect()));
+      } else if (!uid) {
+        this.lastLoadedUser = null;
       }
     });
   }
