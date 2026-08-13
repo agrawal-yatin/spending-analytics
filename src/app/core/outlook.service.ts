@@ -36,17 +36,19 @@ export class OutlookService {
     });
   }
 
-  async importStatements(): Promise<string> {
+  async importStatements(fromISO?: string, toISO?: string): Promise<string> {
     if (!this.available) return 'Enable cloud sync and sign in first.';
     const token = await this.msToken();
     if (!token) { await this.connectMicrosoft(); return 'Redirecting to Microsoft to authorize Outlook…'; }
 
-    const { data, error } = await supabase().functions.invoke('outlook-statements', { body: { accessToken: token } });
+    const { data, error } = await supabase().functions.invoke('outlook-statements', {
+      body: { accessToken: token, fromISO, toISO },
+    });
     if (error) return 'Outlook fetch failed: ' + error.message;
     const res = data as { attachments?: EmailAttachment[]; error?: string; scanned?: number };
     if (res.error) return res.error;
     const attachments = res.attachments ?? [];
-    if (!attachments.length) return `Scanned ${res.scanned ?? 0} emails — no statement PDFs found.`;
+    if (!attachments.length) return `Scanned ${res.scanned ?? 0} emails in range — no PDF attachments found.`;
     return this.importer.stage(attachments);
   }
 }

@@ -4,6 +4,7 @@ import { DataService } from '../core/data.service';
 import { Settings } from '../core/models';
 import { PriceService } from '../core/price.service';
 import { GmailService } from '../core/gmail.service';
+import { OutlookService } from '../core/outlook.service';
 
 @Component({
   selector: 'app-settings',
@@ -67,10 +68,18 @@ import { GmailService } from '../core/gmail.service';
 
     @if (gmail.available) {
       <div class="card">
-        <h2>Import statements from Gmail <span class="chip muted">beta</span></h2>
-        <p class="sub">Scans your Gmail for statement PDFs and stages them on matching accounts. Encrypted PDFs are staged unparsed — open them and enter the password.</p>
-        <button class="btn ghost" [disabled]="gmailBusy()" (click)="importGmail()">{{ gmailBusy() ? 'Working…' : '✉️ Fetch statements from Gmail' }}</button>
-        @if (gmailMsg()) { <p class="hint" style="margin-top:8px">{{ gmailMsg() }}</p> }
+        <h2>Import statements from email <span class="chip muted">beta</span></h2>
+        <p class="sub">Scans your mailbox in a date range for statement PDFs and stages them on matching accounts. Encrypted PDFs prompt for the password.</p>
+        <div class="frow" style="max-width:420px">
+          <div class="field"><label>From</label><input type="date" [(ngModel)]="fromDate" [max]="toDate"></div>
+          <div class="field"><label>To</label><input type="date" [(ngModel)]="toDate" [max]="today"></div>
+        </div>
+        <p class="hint" style="margin-top:0">Max range 1 year. Default: last 90 days.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn ghost" [disabled]="busy()" (click)="importOutlook()">{{ busy() === 'outlook' ? 'Working…' : '📧 Fetch from Outlook' }}</button>
+          <button class="btn ghost" [disabled]="busy()" (click)="importGmail()">{{ busy() === 'gmail' ? 'Working…' : '✉️ Fetch from Gmail' }}</button>
+        </div>
+        @if (mailMsg()) { <p class="hint" style="margin-top:8px">{{ mailMsg() }}</p> }
       </div>
     }
   `,
@@ -79,17 +88,41 @@ export class SettingsComponent {
   store = inject(DataService);
   private prices = inject(PriceService);
   gmail = inject(GmailService);
+  private outlook = inject(OutlookService);
   draft: Settings = structuredClone(this.store.settings());
   refreshing = signal(false);
   priceMsg = signal('');
-  gmailBusy = signal(false);
-  gmailMsg = signal('');
+  busy = signal<'outlook' | 'gmail' | null>(null);
+  mailMsg = signal('');
+  today = new Date().toISOString().slice(0, 10);
+  toDate = this.today;
+  fromDate = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+
+  /** Returns [fromISO, toISO], clamped to a max 365-day window. */
+  private range(): [string, string] {
+    let from = new Date(this.fromDate + 'T00:00:00');
+    const to = new Date(this.toDate + 'T23:59:59');
+    if (to.getTime() - from.getTime() > 365 * 864e5) {
+      from = new Date(to.getTime() - 365 * 864e5);
+      this.fromDate = from.toISOString().slice(0, 10);
+    }
+    return [from.toISOString(), to.toISOString()];
+  }
 
   async importGmail() {
-    this.gmailBusy.set(true); this.gmailMsg.set('');
-    try { this.gmailMsg.set(await this.gmail.importStatements()); }
-    catch (e) { this.gmailMsg.set('Failed: ' + (e as Error).message); }
-    finally { this.gmailBusy.set(false); }
+    this.busy.set('gmail'); this.mailMsg.set('');
+    const [f, t] = this.range();
+    try { this.mailMsg.set(await this.gmail.importStatements(f, t)); }
+    catch (e) { this.mailMsg.set('Failed: ' + (e as Error).message); }
+    finally { this.busy.set(null); }
+  }
+
+  async importOutlook() {
+    this.busy.set('outlook'); this.mailMsg.set('');
+    const [f, t] = this.range();
+    try { this.mailMsg.set(await this.outlook.importStatements(f, t)); }
+    catch (e) { this.mailMsg.set('Failed: ' + (e as Error).message); }
+    finally { this.busy.set(null); }
   }
 
   save() { this.store.saveSettings(structuredClone(this.draft)); alert('Saved.'); }

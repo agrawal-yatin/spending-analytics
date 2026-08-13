@@ -37,17 +37,19 @@ export class GmailService {
   }
 
   /** Fetch statement attachments and stage/parse them onto matching accounts. */
-  async importStatements(): Promise<string> {
+  async importStatements(fromISO?: string, toISO?: string): Promise<string> {
     if (!this.available) return 'Enable cloud sync and sign in first.';
     const token = await this.googleToken();
     if (!token) { await this.connectGoogle(); return 'Redirecting to Google to authorize Gmail…'; }
 
-    const { data, error } = await supabase().functions.invoke('gmail-statements', { body: { accessToken: token } });
+    const { data, error } = await supabase().functions.invoke('gmail-statements', {
+      body: { accessToken: token, fromISO, toISO },
+    });
     if (error) return 'Gmail fetch failed: ' + error.message;
     const res = data as { attachments?: EmailAttachment[]; error?: string; scanned?: number };
     if (res.error) return res.error;
     const attachments = res.attachments ?? [];
-    if (!attachments.length) return `Scanned ${res.scanned ?? 0} emails — no statement PDFs found.`;
+    if (!attachments.length) return `Scanned ${res.scanned ?? 0} emails in range — no PDF attachments found.`;
     return this.importer.stage(attachments);
   }
 }
