@@ -75,12 +75,15 @@ Deno.serve(async (req: Request) => {
       if (attachments.length >= MAX_ATTACHMENTS) break;
       const from = m.from?.emailAddress?.address ?? '';
       const date = m.receivedDateTime ?? '';
-      const attRes = await fetch(`${GRAPH}/me/messages/${m.id}/attachments?$select=name,contentType,contentBytes`, { headers: auth });
+      const attRes = await fetch(`${GRAPH}/me/messages/${m.id}/attachments`, { headers: auth });
       const att = await attRes.json();
       for (const a of att.value ?? []) {
-        const isFile = a['@odata.type'] === '#microsoft.graph.fileAttachment';
-        if (isFile && /\.pdf$/i.test(a.name || '') && a.contentBytes) {
-          attachments.push({ fileName: a.name, contentBase64: a.contentBytes, from, date });
+        // A file attachment is the only kind with contentBytes; require a .pdf
+        // name (or PDF content type). Avoid relying on @odata.type, which a
+        // $select would strip out.
+        const looksPdf = /\.pdf$/i.test(a.name || '') || a.contentType === 'application/pdf';
+        if (looksPdf && a.contentBytes) {
+          attachments.push({ fileName: a.name || 'statement.pdf', contentBase64: a.contentBytes, from, date });
         }
         if (attachments.length >= MAX_ATTACHMENTS) break;
       }

@@ -14,3 +14,6 @@ verify_jwt = true
 
 [functions.gmail-statements]
 verify_jwt = true
+
+[functions.outlook-statements]
+verify_jwt = true
