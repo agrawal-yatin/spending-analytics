@@ -22,7 +22,7 @@ const CORS = {
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const DEFAULT_SEARCH = '"statement" OR "credit card" OR "account statement" OR "e-statement"';
 
-const MAX_MSGS = 800;         // safety cap on messages scanned
+const MAX_MSGS = 1500;        // safety cap on messages scanned
 const MAX_ATTACHMENTS = 200;  // safety cap on PDFs returned
 
 Deno.serve(async (req: Request) => {
@@ -41,11 +41,12 @@ Deno.serve(async (req: Request) => {
     const fromStr = from.toISOString();
     const toStr = to.toISOString();
 
-    // hasAttachments + received in [from, to], newest first. No KQL $search.
-    const filter = encodeURIComponent(`hasAttachments eq true and receivedDateTime ge ${fromStr} and receivedDateTime le ${toStr}`);
-    const order = encodeURIComponent('receivedDateTime desc');
+    // Filter by date range ONLY. Graph rejects hasAttachments + date-range +
+    // $orderby together ("restriction or sort order is too complex"), so we
+    // keep the server filter simple and screen for attachments client-side.
+    const filter = encodeURIComponent(`receivedDateTime ge ${fromStr} and receivedDateTime le ${toStr}`);
     let url: string | undefined =
-      `${GRAPH}/me/messages?$filter=${filter}&$orderby=${order}&$top=50&$select=id,subject,from,hasAttachments,receivedDateTime`;
+      `${GRAPH}/me/messages?$filter=${filter}&$top=50&$select=id,subject,from,hasAttachments,receivedDateTime`;
 
     // Page through @odata.nextLink until the window is exhausted or we hit caps.
     const msgs: any[] = [];
@@ -62,10 +63,11 @@ Deno.serve(async (req: Request) => {
       pages++;
     }
 
-    let filtered = msgs;
+    // Screen for attachments (and optional subject keyword) client-side.
+    let filtered = msgs.filter((m: any) => m.hasAttachments);
     if (query) {
       const q = String(query).toLowerCase();
-      filtered = msgs.filter((m: any) => (m.subject || '').toLowerCase().includes(q));
+      filtered = filtered.filter((m: any) => (m.subject || '').toLowerCase().includes(q));
     }
 
     const attachments: { fileName: string; contentBase64: string; from: string; date: string }[] = [];
